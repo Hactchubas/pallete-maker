@@ -87,7 +87,6 @@ fn generate_palette(path: &Path) -> Result<(Vec<(LAB, f32)>, u128), Box<dyn std:
 
     let weightfn = weights::resolve_mood(&weights::Mood::Dominant);
     let mut output = pallete(&pixels, weightfn, 5 as u8);
-
     // Sort the output colors based on dominance
     output.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
 

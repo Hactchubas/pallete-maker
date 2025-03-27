@@ -110,7 +110,6 @@ pub fn pallete(pixels: &Pixels, weight: WeightFn, k: u8) -> Vec<(LAB, f32)> {
     loop {
         // Assignment step: Clusters are formed in current iteration
         clusters = find_clusters(pixels, &means, k);
-        
 
         // Updation step: New cluster means are calculated
         let mut changed: bool = false;
