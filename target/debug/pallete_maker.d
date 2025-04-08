@@ -1,0 +1,1 @@
+/home/ksm/Programming/Try/rust/pallete_maker/target/debug/pallete_maker: /home/ksm/Programming/Try/rust/pallete_maker/src/color_clusterer.rs /home/ksm/Programming/Try/rust/pallete_maker/src/colors.rs /home/ksm/Programming/Try/rust/pallete_maker/src/main.rs /home/ksm/Programming/Try/rust/pallete_maker/src/weights.rs
