@@ -1,20 +1,17 @@
 use image::Rgb;
-use std::{
-    convert::From,
-    fmt,
-};
+use std::{convert::From, fmt};
 
 pub struct RGB {
     pub r: u8,
     pub g: u8,
-    pub b: u8
+    pub b: u8,
 }
 
 #[derive(Clone)]
 pub struct LAB {
     pub l: f32,
     pub a: f32,
-    pub b: f32
+    pub b: f32,
 }
 
 // RGB -> XYZ -> LAB conversions and vice versa from https://www.easyrgb.com/en/math.php
@@ -33,7 +30,7 @@ fn map_xyz_rgb(val: f32) -> u8 {
 
 fn map_xyz_lab(val: f32) -> f32 {
     if val > EPSILON {
-        val.powf(1.0 /3.0)
+        val.powf(1.0 / 3.0)
     } else {
         (KAPPA * val + 16.0) / 116.0
     }
@@ -47,48 +44,43 @@ impl RGB {
         str::replace(
             &format!("{:2X}{:2X}{:2X}", self.r, self.g, self.b),
             " ",
-            "0"
+            "0",
         )
     }
 
     /**
-    *  Converts the color to the corresponding XYZ color space
-    */
+     *  Converts the color to the corresponding XYZ color space
+     */
     pub fn to_xyz(&self) -> (f32, f32, f32) {
         let var_r = map_rgb_xyz(self.r.into());
         let var_g = map_rgb_xyz(self.g.into());
         let var_b = map_rgb_xyz(self.b.into());
 
         (
-        var_r*0.57667 + var_g*0.18555 + var_b*0.18819,
-        var_r*0.29738 + var_g*0.62735 + var_b*0.07527,
-        var_r*0.02703 + var_g*0.07069 + var_b*0.99110
-        )        
+            var_r * 0.57667 + var_g * 0.18555 + var_b * 0.18819,
+            var_r * 0.29738 + var_g * 0.62735 + var_b * 0.07527,
+            var_r * 0.02703 + var_g * 0.07069 + var_b * 0.99110,
+        )
     }
     /**
-    * Converts RGB to image Rgb pixel
-    */
+     * Converts RGB to image Rgb pixel
+     */
     pub fn to_pixel(&self) -> Rgb<u8> {
         Rgb([self.r, self.g, self.b])
     }
 }
 
-
 impl LAB {
     /**
-    *  Helper function to create a LAB color from RGBvalues without creating intermediate struct
-    */
+     *  Helper function to create a LAB color from RGBvalues without creating intermediate struct
+     */
     pub fn from_rgb(r: u8, g: u8, b: u8) -> Self {
-        Self::from(&RGB {
-            r,
-            g,
-            b
-        })
+        Self::from(&RGB { r, g, b })
     }
-    
+
     /**
-    * Converts from LAB to XYZ color scheme
-    */
+     * Converts from LAB to XYZ color scheme
+     */
     pub fn to_xyz(&self) -> (f32, f32, f32) {
         let mut var_y = (self.l + 16.0) / 116.0;
         let mut var_x = self.a / 500.0 + var_y;
@@ -114,21 +106,23 @@ impl LAB {
     }
 
     /**
-    * Calculate the chroma of the color
-    */
+     * Calculate the chroma of the color
+     */
     pub fn chroma(&self) -> f32 {
         (self.a.powi(2) + self.b.powi(2)).sqrt()
     }
 
     /**
-    * Calculates Delta E(1994) between two colors
-    */
+     * Calculates Delta E(1994) between two colors
+     */
     pub fn distance(&self, color: &LAB) -> f32 {
         let xc1 = (self.a.powi(2) + self.b.powi(2)).sqrt();
         let xc2 = (color.a.powi(2) + color.b.powi(2)).sqrt();
         let xdl = color.l - self.l;
         let mut xdc = xc2 - xc1;
-        let xde = ( (self.l - color.l).powi(2) + (self.a - color.a).powi(2) + (self.b - color.b).powi(2) ).sqrt();
+        let xde =
+            ((self.l - color.l).powi(2) + (self.a - color.a).powi(2) + (self.b - color.b).powi(2))
+                .sqrt();
 
         let mut xdh = xde.powi(2) - xdl.powi(2) - xdc.powi(2);
         if xdh > 0.0 {
@@ -142,13 +136,12 @@ impl LAB {
         xdc /= xsc;
         xdh /= xsh;
 
-        ( xdl.powi(2) + xdc.powi(2) + xdh.powi(2) ).sqrt()
+        (xdl.powi(2) + xdc.powi(2) + xdh.powi(2)).sqrt()
     }
 
-
     /**
-    * Find the index and distance from nearest color from a group of colors
-    */
+     * Find the index and distance from nearest color from a group of colors
+     */
     pub fn nearest(&self, colors: &Vec<LAB>) -> (usize, f32) {
         colors
             .iter()
@@ -161,8 +154,8 @@ impl LAB {
 
 impl From<&RGB> for LAB {
     /**
-    * Creates equivalent LAB color from RGB color
-    */
+     * Creates equivalent LAB color from RGB color
+     */
     fn from(color: &RGB) -> Self {
         let xyz = color.to_xyz();
 
@@ -173,13 +166,12 @@ impl From<&RGB> for LAB {
         return LAB {
             l: 116.0 * var_y - 16.0,
             a: 500.0 * (var_x - var_y),
-            b: 200.0 * (var_y - var_z)
+            b: 200.0 * (var_y - var_z),
         };
     }
 }
 
 impl From<&LAB> for RGB {
-
     /**
      * Creates equivalent RGB color from LAB color
      */
@@ -188,15 +180,14 @@ impl From<&LAB> for RGB {
         let var_x = xyz.0 / 100.0;
         let var_y = xyz.1 / 100.0;
         let var_z = xyz.2 / 100.0;
-        
+
         return RGB {
-            r: map_xyz_rgb(var_x*2.04137 + var_y*-0.56495 + var_z*-0.34469),
-            g: map_xyz_rgb(var_x*-0.96927 + var_y*1.87601 + var_z*0.04156),
-            b: map_xyz_rgb(var_x*0.01345 + var_y*-0.11839 + var_z*1.01541)
+            r: map_xyz_rgb(var_x * 2.04137 + var_y * -0.56495 + var_z * -0.34469),
+            g: map_xyz_rgb(var_x * -0.96927 + var_y * 1.87601 + var_z * 0.04156),
+            b: map_xyz_rgb(var_x * 0.01345 + var_y * -0.11839 + var_z * 1.01541),
         };
     }
 }
-
 
 impl PartialEq for LAB {
     fn eq(&self, other: &Self) -> bool {
@@ -212,12 +203,12 @@ impl PartialEq for RGB {
 
 impl fmt::Display for LAB {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "lab({}, {}, {})", self.l, self.a, self.b)
+        write!(f, "{} {} {}", self.l, self.a, self.b)
     }
 }
 
 impl fmt::Display for RGB {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "rgb({}, {}, {})", self.r, self.g, self.b)
+        write!(f, "{} {}, {}", self.r, self.g, self.b)
     }
 }

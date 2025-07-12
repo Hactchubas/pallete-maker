@@ -1,151 +1,90 @@
-pub mod colors;
+use std::error::Error;
+
+use crate::{
+    cli::parse_args,
+    colors::RGB,
+    pallete::{create_img, generate_palette},
+};
+
+pub mod cli;
 pub mod color_clusterer;
+pub mod colors;
+pub mod pallete;
 pub mod weights;
 
-use std::env;
-use image::RgbImage;
-use crate::color_clusterer::pallete;
-use std::fs;
-use std::path::Path;
-use colors::{LAB, RGB};
-use std::time::Instant;
-use image::GenericImageView;
+fn main() -> Result<(), Box<dyn Error>> {
+    let args: Vec<String> = std::env::args().skip(1).collect(); // Skip program name
 
+    let parsed_request = parse_args(args)?;
+    let img_path = &parsed_request.img_path;
+    let num_colors = &parsed_request.num_colors;
 
-pub type Pixels = Vec<LAB>;
+    let (pallete, generating_time) = generate_palette(img_path, num_colors)?;
 
-fn main() {
-    let args: Vec<String> = env::args().skip(1).collect(); // Skip program name
+    // Display colors based on flags
+    if parsed_request.rgb || parsed_request.hex {
+        for (i, (color_lab, weight)) in pallete.colors.iter().enumerate() {
+            let color_rgb = RGB::from(color_lab);
 
-    if args.is_empty() {
-        println!("No arguments provided.");
-        return;
-    }
-
-    let mut only_colors = false;
-    let mut hex = false;
-    let mut iter = args.iter();
-    while let Some(arg) = iter.next() {
-        match arg.as_str() {
-            "-c" | "--colors" => {
-                only_colors = true
-            },
-            "-hx" | "--hex" => {
-                hex = true
-            },
-            _ => {}
-        }
-    }
-
-    
-    let input_path = args[0].clone(); // Get image path passed by user
-    let img_path = Path::new(&input_path);
-    let output_dir = args[1].clone(); // Get output dir passed by user
-    let output_dir_path = Path::new(&output_dir);
-
-
-    // Create output directory if it doesn't exist
-    if !output_dir_path.exists() && !only_colors {
-        fs::create_dir(&output_dir).expect("Failed to create output directory");
-    }
-
-
-    if img_path.is_file() && is_image(&img_path) {
-        if !only_colors {
-            println!("Processing: {:?}", img_path);
-        }
-
-        // Generate palette
-        pallete_from(&img_path, &output_dir_path, only_colors, hex);
-
-    }       
-
-}
-
-// Check if a file is an image
-fn is_image(path: &Path) -> bool {
-    if let Some(ext) = path.extension() {
-        matches!(ext.to_str().unwrap().to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "bmp")
-    } else {
-        false
-    }
-}
-
-// Generate a color palette
-fn generate_palette(path: &Path) -> Result<(Vec<(LAB, f32)>, u128), Box<dyn std::error::Error>> {
-    let mut img;
-    img = image::open(path).expect("Failed to open image");
-    img = img.resize(512,512, image::imageops::FilterType::CatmullRom);
-
-    // Start timer
-    let now = Instant::now();
-
-    let pixels: Pixels = img
-        .pixels()
-        .map(|(_,_, pix)| LAB::from_rgb(pix[0], pix[1], pix[2]))
-        .collect();
-
-    let weightfn = weights::resolve_mood(&weights::Mood::Dominant);
-    let mut output = pallete(&pixels, weightfn, 5 as u8);
-    // Sort the output colors based on dominance
-    output.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-
-    Ok((output, now.elapsed().as_millis()))
-}
-
-
-// Generate pallete files
-fn pallete_from(path: &Path, output_dir: &Path, only_colors: bool, hex: bool) -> () {
-    match generate_palette(path) {
-        Ok((output, _)) => {
-            for (color, _) in output.iter() {
-                let rgb = RGB::from(color);
-                let mut print_color = format!("{}",&rgb); 
-                if hex { print_color = rgb.hex() }
-
-                println!("{}", print_color);
-
-            }
-            if !only_colors {
-                // Generate and save the palette image
-                let output_img_path = Path::new(output_dir).join(
-                    path.file_stem().unwrap().to_string_lossy().to_string() + "_palette.png",
+            if parsed_request.rgb {
+                println!(
+                    "Color {}: RGB({}, {}, {}) - Weight: {:.2}%",
+                    i + 1,
+                    color_rgb.r,
+                    color_rgb.g,
+                    color_rgb.b,
+                    weight * 100.0
                 );
-                create_pallete_file(&output_img_path, &output)
             }
 
-        },
-        Err(e) => print!("Error: {} WHILE trying to generate pallete from {}", e, path.display()),
-    }
-}
-
-
-// Creates pallete file
-fn create_pallete_file(output_img_path: &Path, colors: &Vec<(LAB, f32)>) {
-
-    if colors.is_empty() {
-        println!("No valid colors found in palette file.");
-        return;
-    }
-
-    let width = 500; // Image width
-    let height = 100; // Height per color strip
-    let img_height = colors.len() as u32 * height;
-    
-    let mut img = RgbImage::new(width, img_height);
-
-    for (i, color) in colors.iter().enumerate() {
-        let (color_lab, _) = color;
-        let color_rgb = RGB::from(color_lab);
-        let pixel_rgb = RGB::to_pixel(&color_rgb);
-
-        let y_start = (i as u32) * height;
-        for y in y_start..(y_start + height) {
-            for x in 0..width {
-                img.put_pixel(x, y, pixel_rgb);
+            if parsed_request.hex {
+                println!(
+                    "Color {}: #{:02X}{:02X}{:02X} - Weight: {:.2}%",
+                    i + 1,
+                    color_rgb.r,
+                    color_rgb.g,
+                    color_rgb.b,
+                    weight * 100.0
+                );
             }
         }
     }
 
-    img.save(output_img_path).expect("Failed to save palette image");
+    // Only create image if output path is provided
+    if let Some(output_path) = &parsed_request.output_path {
+        let img = create_img(&pallete.colors)?;
+
+        let final_output_path = if output_path.is_dir() {
+            // If output is a directory, generate filename with palette_ prefix
+            let img_filename = img_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("image");
+            let img_extension = img_path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("png");
+            let palette_filename = format!("palette_{}.{}", img_filename, img_extension);
+            output_path.join(palette_filename)
+        } else {
+            // If output is a file path, check if it already exists
+            if output_path.exists() {
+                return Err(
+                    format!("Output file '{}' already exists", output_path.display()).into()
+                );
+            }
+            output_path.clone()
+        };
+
+        img.save(&final_output_path)?;
+        if !parsed_request.silent {
+            println!("Palette image saved to: {}", final_output_path.display());
+        }
+    }
+
+    if !parsed_request.silent && parsed_request.time {
+        println!("Palette generated in {}ms", generating_time);
+    }
+
+    Ok(())
 }
